@@ -8,8 +8,7 @@ type Job func(context.Context)
 // Scheduler can schedule jobs.
 type Scheduler interface {
 	// Schedule asks the scheduler to schedule a job defined by the given func.
-	// Schedule to a stopped scheduler might panic.
-	Schedule(j Job)
+	Schedule(j Job) error
 
 	// Pending returns number of pending jobs
 	Pending() int

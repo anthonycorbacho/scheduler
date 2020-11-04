@@ -25,7 +25,9 @@ func TestFIFOSchedule(t *testing.T) {
 	}
 
 	for _, j := range jobs {
-		s.Schedule(j)
+		if err := s.Schedule(j); err != nil {
+			t.Errorf("schedule job %v", err)
+		}
 	}
 
 	s.WaitFinish(100)

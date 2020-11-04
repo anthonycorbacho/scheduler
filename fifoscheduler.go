@@ -2,21 +2,19 @@ package scheduler
 
 import (
 	"context"
+	"errors"
 	"sync"
 )
 
-// fifo represent as FiFo scheduler.
+// fifo represent as FIFO scheduler.
 type fifo struct {
 	mu sync.Mutex
-
 	resume    chan struct{}
 	scheduled int
 	finished  int
 	pendings  []Job
-
 	ctx    context.Context
 	cancel context.CancelFunc
-
 	finishCond *sync.Cond
 	donec      chan struct{}
 }
@@ -35,12 +33,12 @@ func NewFIFOScheduler() Scheduler {
 }
 
 // Schedule schedules a job that will be ran in FIFO order sequentially.
-func (f *fifo) Schedule(j Job) {
+func (f *fifo) Schedule(j Job) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
 	if f.cancel == nil {
-		panic("schedule: schedule to stopped scheduler")
+		return errors.New("schedule to stopped scheduler")
 	}
 
 	if len(f.pendings) == 0 {
@@ -50,6 +48,7 @@ func (f *fifo) Schedule(j Job) {
 		}
 	}
 	f.pendings = append(f.pendings, j)
+	return nil
 }
 
 func (f *fifo) Pending() int {
@@ -95,17 +94,18 @@ func (f *fifo) run() {
 	}()
 
 	for {
-		var todo Job
+		var task Job
 		f.mu.Lock()
 		if len(f.pendings) != 0 {
 			f.scheduled++
-			todo = f.pendings[0]
+			task = f.pendings[0]
 		}
 		f.mu.Unlock()
-		if todo == nil {
+		if task == nil {
 			select {
 			case <-f.resume:
 			case <-f.ctx.Done():
+				// naive way to "handle" stop pending tasks.
 				f.mu.Lock()
 				pendings := f.pendings
 				f.pendings = nil
@@ -117,7 +117,7 @@ func (f *fifo) run() {
 				return
 			}
 		} else {
-			todo(f.ctx)
+			task(f.ctx)
 			f.finishCond.L.Lock()
 			f.finished++
 			f.pendings = f.pendings[1:]
