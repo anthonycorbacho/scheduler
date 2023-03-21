@@ -6,23 +6,26 @@ import (
 	"sync"
 )
 
-// fifo represent as FIFO scheduler.
-type fifo struct {
-	mu sync.Mutex
-	resume    chan struct{}
-	scheduled int
-	finished  int
-	pendings  []Job
-	ctx    context.Context
-	cancel context.CancelFunc
+// Verify interface compliance
+var _ Scheduler = (*Fifo)(nil)
+
+// Fifo represent as FIFO scheduler.
+type Fifo struct {
+	mu         sync.Mutex
+	resume     chan struct{}
+	scheduled  int
+	finished   int
+	pendings   []Job
+	ctx        context.Context
+	cancel     context.CancelFunc
 	finishCond *sync.Cond
 	donec      chan struct{}
 }
 
 // NewFIFOScheduler returns a Scheduler that schedules jobs in FIFO
 // order sequentially
-func NewFIFOScheduler() Scheduler {
-	f := &fifo{
+func NewFIFOScheduler() *Fifo {
+	f := &Fifo{
 		resume: make(chan struct{}, 1),
 		donec:  make(chan struct{}, 1),
 	}
@@ -32,8 +35,8 @@ func NewFIFOScheduler() Scheduler {
 	return f
 }
 
-// Schedule schedules a job that will be ran in FIFO order sequentially.
-func (f *fifo) Schedule(j Job) error {
+// Schedule schedules a job that will be run in FIFO order sequentially.
+func (f *Fifo) Schedule(j Job) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
@@ -51,25 +54,25 @@ func (f *fifo) Schedule(j Job) error {
 	return nil
 }
 
-func (f *fifo) Pending() int {
+func (f *Fifo) Pending() int {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return len(f.pendings)
 }
 
-func (f *fifo) Scheduled() int {
+func (f *Fifo) Scheduled() int {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.scheduled
 }
 
-func (f *fifo) Finished() int {
+func (f *Fifo) Finished() int {
 	f.finishCond.L.Lock()
 	defer f.finishCond.L.Unlock()
 	return f.finished
 }
 
-func (f *fifo) WaitFinish(n int) {
+func (f *Fifo) WaitFinish(n int) {
 	f.finishCond.L.Lock()
 	for f.finished < n || len(f.pendings) != 0 {
 		f.finishCond.Wait()
@@ -78,7 +81,7 @@ func (f *fifo) WaitFinish(n int) {
 }
 
 // Stop stops the scheduler and cancels all pending jobs.
-func (f *fifo) Stop() {
+func (f *Fifo) Stop() {
 	f.mu.Lock()
 	f.cancel()
 	f.cancel = nil
@@ -86,7 +89,7 @@ func (f *fifo) Stop() {
 	<-f.donec
 }
 
-func (f *fifo) run() {
+func (f *Fifo) run() {
 	// TODO: recover from job panic?
 	defer func() {
 		close(f.donec)
